@@ -21,7 +21,10 @@ Space Grotesk/Inter/JetBrains Mono, claro/escuro). Logo: `public/logo.png`
 
 Etapas 1–10 da especificação concluídas e extras abaixo. Roda localmente com
 dados reais do usuário (2 empresas, 485 marcas cada, auditorias em uso).
-**Nada foi commitado ainda** (repo git sem commits) — sugerir commit se fizer sentido.
+Repositório: https://github.com/Check-In-CFS/relatorio-contagem (organização
+Check-In-CFS, branch `main`, remoto `origin`). Push via HTTPS com Git Credential
+Manager (sem `gh` instalado). Commitar/enviar só quando o usuário pedir; antes de
+enviar, conferir que nenhum `.env*`, `.ods` ou senha entrou no commit.
 
 Extras além da especificação, pedidos pelo usuário:
 1. **Código da marca** exibido/buscável/ordenável na tela da auditoria
