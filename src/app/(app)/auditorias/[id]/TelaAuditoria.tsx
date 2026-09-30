@@ -5,19 +5,15 @@ import { useRouter } from 'next/navigation';
 import type { ResumoAuditoria } from '@/components/CartaoAuditoria';
 import { Alerta, AreaTexto, BarraProgresso, Botao, Campo, Cartao, cx, Selecao, SeloStatus } from '@/components/ui';
 import { formatarDataHora, formatarDuracao, percentual } from '@/lib/formato';
-import { ROTULO_STATUS_AUDITORIA, type AuditoriaMarca, type StatusMarca } from '@/lib/tipos';
+import { ROTULO_STATUS_AUDITORIA, ROTULO_STATUS_MARCA_PLURAL, type AuditoriaMarca, type StatusMarca } from '@/lib/tipos';
 import { atualizarStatusMarca, finalizarAuditoria } from '../actions';
+import { GerarPdf } from './GerarPdf';
 
 type Filtro = 'todas' | StatusMarca;
 type Ordem = 'az' | 'za' | 'codigo' | 'abertas' | 'recentes';
 
 const STATUS: StatusMarca[] = ['pendente', 'em_contagem', 'parcial', 'concluida'];
-const PLURAL: Record<StatusMarca, string> = {
-  pendente: 'Pendentes',
-  em_contagem: 'Em contagem',
-  parcial: 'Parciais',
-  concluida: 'Concluídas',
-};
+const PLURAL = ROTULO_STATUS_MARCA_PLURAL;
 // "Não concluídas primeiro": as que estão sendo contadas agora vêm no topo.
 const PESO_ABERTAS: Record<StatusMarca, number> = { em_contagem: 0, pendente: 1, parcial: 2, concluida: 3 };
 
@@ -64,7 +60,8 @@ export function TelaAuditoria({
           m.marca_nome.toLocaleUpperCase('pt-BR').includes(termo) ||
           String(m.marca_codigo ?? '').startsWith(termo.replace(/\./g, ''))),
     );
-    const porNome = (a: AuditoriaMarca, b: AuditoriaMarca) => a.marca_nome.localeCompare(b.marca_nome, 'pt-BR');
+    const porNome = (a: AuditoriaMarca, b: AuditoriaMarca) =>
+      a.marca_nome.localeCompare(b.marca_nome, 'pt-BR', { numeric: true });
     const comparadores: Record<Ordem, (a: AuditoriaMarca, b: AuditoriaMarca) => number> = {
       az: porNome,
       za: (a, b) => -porNome(a, b),
@@ -122,10 +119,11 @@ export function TelaAuditoria({
             <span className="font-mono">{formatarDuracao(auditoria.iniciada_em, auditoria.finalizada_em, agora)}</span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Botao variante="secundario" onClick={() => router.refresh()}>
             Atualizar
           </Botao>
+          <GerarPdf auditoria={auditoria} marcas={marcas} filtroAtual={filtro} />
           {podeEditar && <Finalizar auditoriaId={auditoria.id} totais={totais} />}
         </div>
       </div>

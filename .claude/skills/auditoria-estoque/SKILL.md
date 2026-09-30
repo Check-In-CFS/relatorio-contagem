@@ -34,6 +34,10 @@ Extras além da especificação, pedidos pelo usuário:
 3. **Gestão de usuários pela tela** (Administração → Usuários): criar usuário
    com nível, redefinir senha, desativar = bloqueio de login no Auth.
 4. **Logo** no cabeçalho, login e favicon.
+5. **Gerar PDF** das marcas por status na tela da auditoria — ver skill `dash-pdf-marcas`.
+
+Skills focadas complementares (`.claude/skills/dash-*`): `dash-pdf-marcas`,
+`dash-diagnostico-dev` (erro 500 no dev do usuário, instância paralela, login via curl).
 
 Pendências/ideias em aberto (perguntar antes de fazer):
 - Trocar a cor primária (violeta) pelo vermelho da logo — oferecido, sem resposta.

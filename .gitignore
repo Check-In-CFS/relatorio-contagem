@@ -13,3 +13,4 @@ supabase/.branches/
 
 # Segredos do Supabase local em Docker
 .env.docker
+.next-*/

@@ -10,6 +10,13 @@ export const ROTULO_STATUS_MARCA: Record<StatusMarca, string> = {
   concluida: 'Concluída',
 };
 
+export const ROTULO_STATUS_MARCA_PLURAL: Record<StatusMarca, string> = {
+  pendente: 'Pendentes',
+  em_contagem: 'Em contagem',
+  parcial: 'Parciais',
+  concluida: 'Concluídas',
+};
+
 export const ROTULO_STATUS_AUDITORIA: Record<StatusAuditoria, string> = {
   em_andamento: 'Em andamento',
   concluida: 'Concluída',
