@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+supabase/.temp/
+supabase/.branches/
+# Relatórios reais do Santri contêm dados da empresa — nunca versionar.
+*.ods
+
+# Segredos do Supabase local em Docker
+.env.docker

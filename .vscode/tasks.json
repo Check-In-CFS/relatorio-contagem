@@ -1,0 +1,30 @@
+{
+  // Ctrl+Shift+B → "Iniciar sistema": sobe o banco (Docker) e o app.
+  "version": "2.0.0",
+  "options": {
+    "shell": {
+      "executable": "C:\\Users\\castelo\\AppData\\Local\\Programs\\Git\\bin\\bash.exe",
+      "args": ["-lc"]
+    },
+    "env": {
+      "PATH": "C:\\Users\\castelo\\AppData\\Local\\Programs\\node-v24.19.0-win-x64;${env:PATH}"
+    }
+  },
+  "tasks": [
+    {
+      "label": "Iniciar sistema",
+      "type": "shell",
+      "command": "npm run db:up && npm run dev",
+      "group": { "kind": "build", "isDefault": true },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Parar banco",
+      "type": "shell",
+      "command": "npm run db:down",
+      "problemMatcher": []
+    }
+  ]
+}

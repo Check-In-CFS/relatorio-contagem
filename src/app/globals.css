@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens da identidade visual, em canais RGB para o Tailwind aplicar opacidade. */
+:root {
+  --brand-primary: 91 61 245;   /* #5B3DF5 */
+  --brand-accent: 0 214 164;    /* #00D6A4 */
+  --brand-warn: 255 138 61;     /* #FF8A3D */
+  --brand-danger: 255 71 87;    /* #FF4757 */
+  --surface-bg: 247 247 251;    /* #F7F7FB */
+  --surface-card: 255 255 255;  /* #FFFFFF */
+  --text-primary: 20 20 31;     /* #14141F */
+  --text-muted: 107 107 125;    /* #6B6B7D */
+  --border: 228 228 238;        /* #E4E4EE */
+  color-scheme: light;
+}
+
+.dark {
+  --brand-primary: 139 117 255; /* #8B75FF */
+  --brand-accent: 0 240 181;    /* #00F0B5 */
+  --brand-warn: 255 163 92;     /* #FFA35C */
+  --brand-danger: 255 107 120;  /* #FF6B78 */
+  --surface-bg: 13 13 20;       /* #0D0D14 */
+  --surface-card: 23 23 31;     /* #17171F */
+  --text-primary: 242 242 247;  /* #F2F2F7 */
+  --text-muted: 151 151 168;    /* #9797A8 */
+  --border: 42 42 54;           /* #2A2A36 */
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+}
+
+h1, h2, h3 {
+  @apply font-display;
+}
+
+/* Tons de texto sobre as cores de status, garantindo contraste AA nos dois temas. */
+.texto-sucesso { color: #00795c; }
+.dark .texto-sucesso { color: rgb(var(--brand-accent)); }
+.texto-aviso { color: #a64b00; }
+.dark .texto-aviso { color: rgb(var(--brand-warn)); }
+.texto-perigo { color: #c8102e; }
+.dark .texto-perigo { color: rgb(var(--brand-danger)); }

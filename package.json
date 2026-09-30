@@ -1,0 +1,43 @@
+{
+  "name": "auditoria-estoque",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:reset": "docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml down -v && npm run db:up",
+    "db:up": "node scripts/supabase-local.mjs preparar && docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml up -d --wait && docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml run --rm migrate",
+    "db:migrate": "docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml run --rm migrate",
+    "db:down": "docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml down",
+    "db:logs": "docker compose --env-file .env.docker -f docker/supabase/docker-compose.yml logs -f --tail 100",
+    "db:admin": "node scripts/supabase-local.mjs admin",
+    "test:integracao": "RODAR_INTEGRACAO=1 vitest run src/integracao"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "next": "^14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "server-only": "^0.0.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "autoprefixer": "^10.6.1",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
+    "postcss": "^8.5.28",
+    "supabase": "^2.118.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "5.9",
+    "vitest": "^5.0.2"
+  }
+}

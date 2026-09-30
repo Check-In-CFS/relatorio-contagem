@@ -1,0 +1,12 @@
+{
+  // O PowerShell desta máquina roda em modo restrito e não executa o npm.
+  // Neste projeto o terminal padrão é o Git Bash.
+  "terminal.integrated.profiles.windows": {
+    "Git Bash": {
+      "path": "C:\\Users\\castelo\\AppData\\Local\\Programs\\Git\\bin\\bash.exe",
+      "args": ["--login", "-i"],
+      "icon": "terminal-bash"
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "Git Bash"
+}
