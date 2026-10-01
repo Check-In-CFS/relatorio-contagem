@@ -37,13 +37,14 @@ Extras além da especificação, pedidos pelo usuário:
 5. **Gerar PDF** das marcas por status na tela da auditoria — ver skill `dash-pdf-marcas`.
 
 Skills focadas complementares (`.claude/skills/dash-*`): `dash-pdf-marcas`,
-`dash-diagnostico-dev` (erro 500 no dev do usuário, instância paralela, login via curl).
+`dash-diagnostico-dev` (erro 500 no dev do usuário, instância paralela, login via curl),
+`dash-supabase-nuvem` (projeto na nuvem: migrations aplicadas e pendências para ir online).
 
 Pendências/ideias em aberto (perguntar antes de fazer):
 - Trocar a cor primária (violeta) pelo vermelho da logo — oferecido, sem resposta.
 - Importação de contagens hoje pula o "Iniciar" (leva pendente → parcial/concluída
   direto). Oferecido tornar isso restrito — sem resposta.
-- Subir para Supabase nuvem (aplicar as migrations em ordem + variáveis).
+- Supabase nuvem: em andamento — projeto `osldkpeuoynadboazmph`; estado e o que falta na skill `dash-supabase-nuvem`.
 - Build de produção não foi rodado após as últimas mudanças (não rodar
   `next build` enquanto o usuário estiver com `npm run dev` aberto: compartilham `.next`).
 
@@ -72,7 +73,8 @@ npm run dev        # http://localhost:3000
   `export PATH="/c/Users/castelo/AppData/Local/Programs/node-v24.19.0-win-x64:$PATH"`.
 - **Política de grupo** bloqueia: `cmd.exe` iniciado pelo npm/npx, `npm.cmd`, e o
   binário da **Supabase CLI** (por isso o Supabase roda via compose próprio).
-  `.npmrc` do projeto usa Git Bash como `script-shell`. `npx` falha → use
+  `script-shell` = Git Bash fica no `.npmrc` do **usuário** (`C:\Users\castelo\.npmrc`),
+  NUNCA no do projeto: o `.npmrc` versionado com caminho Windows quebrava o build da Vercel (Linux). `npx` falha → use
   `node node_modules/<pkg>/...` ou scripts do package.json.
 - **PowerShell em Constrained Language Mode**: `npm` não roda no PowerShell do
   usuário. Terminal padrão do VS Code no projeto = Git Bash (`.vscode/settings.json`).
