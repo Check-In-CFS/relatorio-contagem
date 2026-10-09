@@ -8,6 +8,12 @@ const SECOES = [
   { href: '/admin/usuarios', titulo: 'Usuários', descricao: 'Perfil de acesso de cada pessoa.', soAdmin: true },
   { href: '/admin/marcas', titulo: 'Importar marcas', descricao: 'Relação de Produtos por Marca do Santri.', soAdmin: true },
   {
+    href: '/admin/estoque',
+    titulo: 'Importar estoque',
+    descricao: 'Valor de Estoque Analítico do Santri — SKUs ativos de cada marca, por departamento. Antes da auditoria.',
+    soAdmin: false,
+  },
+  {
     href: '/admin/contagens',
     titulo: 'Importar contagens',
     descricao: 'Ordens de Contagens Acompanhadas do Santri — sugere status na auditoria em andamento.',

@@ -22,6 +22,8 @@ O MCP grava com timestamp próprio (não o do nome do arquivo); confira com
 | 20260930110000_status_em_contagem | ✅ |
 | 20260930110100_inicio_de_marca_e_codigo | ✅ (independe da rls_desempenho; os índices dela usam `if not exists`) |
 
+| 20261009120000_estoque_e_cobertura_sku | ❌ **pendente** — aplicar junto com o deploy do código novo (o código antigo chama `importar_contagens` com `p_sugestoes`, que a migration remove) |
+
 Toda migration nova precisa ser aplicada **nos dois lugares**: local (`npm run db:migrate`) e nuvem.
 
 ## Falta para usar online
@@ -43,7 +45,11 @@ Pendente:
    Deploy na Vercel falhava: `.npmrc` versionado com `script-shell` Windows (removido em 2026-10-01,
    movido para o `.npmrc` do usuário). `src/lib/supabase/env.ts` lança erro no build se faltar
    `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` — cadastrar na Vercel antes do deploy.
-   Sem acesso ao conector Vercel nesta máquina; GitHub não mostrava deployments da Vercel no repo.
+   **No ar desde 2026-10-01: https://relatorio-contagem.vercel.app** (time Vercel `check-in2`,
+   deploy automático a cada push na `main`; variáveis cadastradas pelo usuário).
+   Sem conector Vercel nesta máquina: acompanhar deploy pelo status do commit no GitHub
+   (`curl https://api.github.com/repos/Check-In-CFS/relatorio-contagem/commits/main/status`).
+   Chaves da nuvem ficam em `.env.online` (gitignored) — não confundir com `.env.local`/`.env.docker` (locais).
 6. Dados reais do banco local (empresas, lojas, marcas, auditorias) **não** foram copiados;
    auditorias referenciam `profiles.id` = uuid do usuário no Auth, então copiar exige recriar
    os usuários com os mesmos uuid ou remapear.

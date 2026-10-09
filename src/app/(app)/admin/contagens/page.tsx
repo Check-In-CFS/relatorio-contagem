@@ -39,7 +39,7 @@ export default async function ContagensPage() {
     <>
       <Cabecalho
         titulo="Importar contagens"
-        descricao='Envie o relatório "Ordens de Contagens Acompanhadas Analítico" do Santri ADM. As contagens sugerem o status das marcas na auditoria em andamento da loja — o auditor pode alterar depois.'
+        descricao='Envie o relatório "Ordens de Contagens Acompanhadas Analítico" do Santri ADM. Na auditoria em andamento da loja, a marca fica Concluída quando todos os SKUs ativos dela (do estoque importado) foram contados, e Parcial quando só parte foi — o auditor pode alterar depois.'
       />
       {lojas.data?.length ? (
         <ImportarContagens lojas={lojas.data} />

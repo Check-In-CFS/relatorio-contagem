@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { ResumoAuditoria } from '@/components/CartaoAuditoria';
 import { Alerta, AreaTexto, BarraProgresso, Botao, Campo, Cartao, cx, Selecao, SeloStatus } from '@/components/ui';
 import { formatarDataHora, formatarDuracao, percentual } from '@/lib/formato';
+import type { Cobertura } from '@/lib/sugestao';
 import { ROTULO_STATUS_AUDITORIA, ROTULO_STATUS_MARCA_PLURAL, type AuditoriaMarca, type StatusMarca } from '@/lib/tipos';
 import { atualizarStatusMarca, finalizarAuditoria } from '../actions';
 import { GerarPdf } from './GerarPdf';
@@ -20,10 +21,12 @@ const PESO_ABERTAS: Record<StatusMarca, number> = { em_contagem: 0, pendente: 1,
 export function TelaAuditoria({
   auditoria,
   marcasIniciais,
+  cobertura,
   podeEditar,
 }: {
   auditoria: ResumoAuditoria;
   marcasIniciais: AuditoriaMarca[];
+  cobertura: Cobertura[];
   podeEditar: boolean;
 }) {
   const router = useRouter();
@@ -33,6 +36,7 @@ export function TelaAuditoria({
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [ordem, setOrdem] = useState<Ordem>('az');
+  const [departamento, setDepartamento] = useState('');
   const [agora, setAgora] = useState(() => Date.now());
   const buscaAdiada = useDeferredValue(busca);
 
@@ -45,6 +49,14 @@ export function TelaAuditoria({
     return () => clearInterval(t);
   }, [auditoria.finalizada_em]);
 
+  const coberturaPorId = useMemo(() => new Map(cobertura.map((c) => [c.auditoria_marca_id, c])), [cobertura]);
+  // Sem estoque importado para a loja, não há SKUs ativos: a coluna de cobertura some.
+  const temEstoque = cobertura.some((c) => c.skus_ativos > 0);
+  const departamentos = useMemo(
+    () => [...new Set(cobertura.flatMap((c) => c.departamentos))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
+    [cobertura],
+  );
+
   const totais = useMemo(() => {
     const t: Record<StatusMarca, number> = { pendente: 0, em_contagem: 0, parcial: 0, concluida: 0 };
     for (const m of marcas) t[m.status]++;
@@ -56,6 +68,7 @@ export function TelaAuditoria({
     const lista = marcas.filter(
       (m) =>
         (filtro === 'todas' || m.status === filtro) &&
+        (!departamento || coberturaPorId.get(m.id)?.departamentos.includes(departamento)) &&
         (!termo ||
           m.marca_nome.toLocaleUpperCase('pt-BR').includes(termo) ||
           String(m.marca_codigo ?? '').startsWith(termo.replace(/\./g, ''))),
@@ -70,7 +83,7 @@ export function TelaAuditoria({
       recentes: (a, b) => b.atualizado_em.localeCompare(a.atualizado_em) || porNome(a, b),
     };
     return lista.sort(comparadores[ordem]);
-  }, [marcas, filtro, buscaAdiada, ordem]);
+  }, [marcas, filtro, buscaAdiada, ordem, departamento, coberturaPorId]);
 
   async function salvar(marca: AuditoriaMarca, status: StatusMarca, observacao: string | null) {
     const anterior = marca;
@@ -186,6 +199,21 @@ export function TelaAuditoria({
             </option>
           ))}
         </Selecao>
+        {departamentos.length > 0 && (
+          <Selecao
+            value={departamento}
+            onChange={(e) => setDepartamento(e.target.value)}
+            className="w-auto max-w-[14rem]"
+            aria-label="Departamento"
+          >
+            <option value="">Todos os departamentos</option>
+            {departamentos.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </Selecao>
+        )}
         <Selecao value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} className="w-auto" aria-label="Ordenação">
           <option value="az">Nome A–Z</option>
           <option value="za">Nome Z–A</option>
@@ -203,6 +231,7 @@ export function TelaAuditoria({
           <LinhaMarca
             key={m.id}
             marca={m}
+            cobertura={temEstoque ? coberturaPorId.get(m.id) : undefined}
             podeEditar={podeEditar}
             salvando={salvando.has(m.id)}
             onSalvar={(status, obs) => salvar(m, status, obs)}
@@ -219,11 +248,13 @@ const BOTAO_ACAO =
 
 function LinhaMarca({
   marca,
+  cobertura,
   podeEditar,
   salvando,
   onSalvar,
 }: {
   marca: AuditoriaMarca;
+  cobertura?: Cobertura;
   podeEditar: boolean;
   salvando: boolean;
   onSalvar: (status: StatusMarca, observacao: string | null) => void;
@@ -246,6 +277,15 @@ function LinhaMarca({
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
             <SeloStatus status={marca.status} />
+            {cobertura && (
+              <span
+                className="font-mono"
+                title={`${cobertura.skus_contados} SKUs diferentes contados de ${cobertura.skus_ativos} ativos no estoque (${cobertura.skus_com_saldo} com saldo)`}
+              >
+                {cobertura.skus_contados}/{cobertura.skus_ativos} SKUs
+                {cobertura.skus_ativos > 0 && ` · ${Math.floor((cobertura.skus_contados / cobertura.skus_ativos) * 100)}%`}
+              </span>
+            )}
             {marca.iniciada_em && marca.status !== 'pendente' && (
               <span>iniciada {formatarDataHora(marca.iniciada_em)}</span>
             )}

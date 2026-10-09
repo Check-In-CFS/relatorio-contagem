@@ -7,7 +7,15 @@ import { lerLinhasDoArquivo, SeletorArquivo } from '@/components/SeletorArquivo'
 import { Alerta, Botao, Cartao, Rotulo, Selecao, SeloStatus } from '@/components/ui';
 import { buscarTodas } from '@/lib/paginacao';
 import { parseContagensAcompanhadas, type ResultadoContagens, type StatusContagem } from '@/lib/parsers/contagens';
-import { calcularSugestoes, planejarAplicacao, type MarcaDaAuditoria, type MudancaPlanejada } from '@/lib/sugestao';
+import {
+  marcasSemCorrespondencia,
+  normalizarNomeMarca,
+  planejarAplicacao,
+  skusDoArquivo,
+  type Cobertura,
+  type MarcaDaAuditoria,
+  type MudancaPlanejada,
+} from '@/lib/sugestao';
 import { createClient } from '@/lib/supabase/client';
 import { importarContagens, type ResultadoImportacaoContagens } from '../actions';
 
@@ -29,6 +37,7 @@ type Previa = {
   porStatus: Partial<Record<StatusContagem, number>>;
   marcasTocadas: number;
   auditoria: { id: string; numero: number } | null;
+  semEstoque: boolean;
   mudancas: MudancaPlanejada[];
   semCorrespondencia: string[];
 };
@@ -49,7 +58,7 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
     setLendo(true);
     try {
       const leitura = parseContagensAcompanhadas(await lerLinhasDoArquivo(arquivo));
-      const sugestoes = calcularSugestoes(leitura.contagens);
+      const marcasNoArquivo = new Set(leitura.contagens.flatMap((c) => c.itens.map((i) => normalizarNomeMarca(i.marca))));
 
       const supabase = createClient();
       const { data: auditoria, error } = await supabase
@@ -60,17 +69,29 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
         .maybeSingle<{ id: string; numero: number }>();
       if (error) throw new Error(error.message);
 
+      const estoque = await supabase.from('estoque_itens').select('produto_codigo', { count: 'exact', head: true }).eq('loja_id', lojaId);
+      if (estoque.error) throw new Error(estoque.error.message);
+
       const marcas = auditoria
         ? await buscarTodas<MarcaDaAuditoria>((de, ate) =>
             supabase
               .from('auditoria_marcas')
-              .select('id, marca_nome, status')
+              .select('id, marca_nome, status, status_origem')
               .eq('auditoria_id', auditoria.id)
               .order('id')
               .range(de, ate),
           )
         : [];
-      const plano = planejarAplicacao(marcas, sugestoes);
+      // Cobertura já gravada + SKUs deste arquivo, calculada pelo próprio banco.
+      const cobertura =
+        auditoria && estoque.count
+          ? await buscarTodas<Cobertura>((de, ate) =>
+              supabase
+                .rpc('cobertura_auditoria', { p_auditoria_id: auditoria.id, p_extras: skusDoArquivo(leitura.contagens) })
+                .order('auditoria_marca_id')
+                .range(de, ate),
+            )
+          : [];
 
       const porStatus: Previa['porStatus'] = {};
       for (const c of leitura.contagens) porStatus[c.status] = (porStatus[c.status] ?? 0) + 1;
@@ -80,10 +101,11 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
         leitura,
         totalItens: leitura.contagens.reduce((t, c) => t + c.itens.length, 0),
         porStatus,
-        marcasTocadas: sugestoes.size,
+        marcasTocadas: marcasNoArquivo.size,
         auditoria,
-        mudancas: plano.mudancas,
-        semCorrespondencia: auditoria ? plano.semCorrespondencia : [],
+        semEstoque: !estoque.count,
+        mudancas: planejarAplicacao(marcas, cobertura),
+        semCorrespondencia: auditoria ? marcasSemCorrespondencia(leitura.contagens, marcas) : [],
       });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
@@ -112,7 +134,8 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
 
   const loja = lojas.find((l) => l.id === lojaId);
   const paraConcluida = previa?.mudancas.filter((m) => m.para === 'concluida').length ?? 0;
-  const paraParcial = (previa?.mudancas.length ?? 0) - paraConcluida;
+  const rebaixadas = previa?.mudancas.filter((m) => m.de === 'concluida' && m.para === 'parcial').length ?? 0;
+  const paraParcial = (previa?.mudancas.length ?? 0) - paraConcluida - rebaixadas;
 
   return (
     <div className="space-y-4">
@@ -190,10 +213,20 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
           </p>
 
           <div className="mt-5">
-            {previa.auditoria ? (
+            {previa.auditoria && previa.semEstoque ? (
+              <Alerta>
+                Esta loja ainda não tem estoque importado.{' '}
+                <Link href="/admin/estoque" className="underline">
+                  Importe o &quot;Valor de Estoque - Analítico&quot;
+                </Link>{' '}
+                antes: sem ele não há como saber quantos SKUs cada marca tem.
+              </Alerta>
+            ) : previa.auditoria ? (
               <Alerta tipo={previa.mudancas.length ? 'sucesso' : 'aviso'}>
-                Auditoria #{previa.auditoria.numero} em andamento: {paraConcluida} marcas passam para Concluída e{' '}
-                {paraParcial} para Parcial. Nenhum status será rebaixado.
+                Auditoria #{previa.auditoria.numero} em andamento: {paraConcluida} marcas passam para Concluída (todos os
+                SKUs contados) e {paraParcial} para Parcial.
+                {rebaixadas > 0 && ` ${rebaixadas} marcas que a importação tinha concluído voltam para Parcial (faltam SKUs).`}{' '}
+                Status marcado à mão nunca é rebaixado.
               </Alerta>
             ) : (
               <Alerta tipo="aviso">
@@ -223,6 +256,9 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
                   <li key={m.id} className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{m.marca}</span>
                     <SeloStatus status={m.de} /> → <SeloStatus status={m.para} />
+                    <span className="font-mono text-xs text-muted">
+                      {m.contados}/{m.ativos} SKUs
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -245,7 +281,7 @@ export function ImportarContagens({ lojas }: { lojas: LojaComEmpresa[] }) {
             <Botao variante="secundario" onClick={() => setPrevia(null)} disabled={enviando}>
               Cancelar
             </Botao>
-            <Botao onClick={confirmar} disabled={enviando}>
+            <Botao onClick={confirmar} disabled={enviando || (!!previa.auditoria && previa.semEstoque)}>
               {enviando ? 'Importando…' : 'Confirmar importação'}
             </Botao>
           </div>

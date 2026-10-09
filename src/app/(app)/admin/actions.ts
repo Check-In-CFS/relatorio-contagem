@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { falha, mensagemDeValidacao, mensagemDoBanco, sucesso, type Resultado } from '@/lib/acoes';
 import { exigirPerfil } from '@/lib/auth';
 import { STATUS_CONTAGEM } from '@/lib/parsers/contagens';
-import { calcularSugestoes } from '@/lib/sugestao';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ROTULO_PERFIL } from '@/lib/tipos';
 import { criarUsuario, redefinirSenha, sincronizarBloqueio } from '@/lib/usuarios';
@@ -233,26 +232,62 @@ export async function importarContagens(
 
   const { supabase } = await exigirPerfil('gestor', 'administrador');
 
-  // As sugestões são recalculadas aqui, no servidor, a partir dos dados
-  // validados — nunca aceitas prontas do navegador.
-  const sugestoes = [...calcularSugestoes(dados.data.contagens).values()].map((s) => ({
-    marca: s.marca,
-    status: s.status,
-  }));
-
+  // O status das marcas é calculado no banco (public.aplicar_cobertura), a
+  // partir das contagens gravadas e do estoque da loja — nada vem pronto do navegador.
   const { data, error } = await supabase.rpc('importar_contagens', {
     p_loja_id: dados.data.lojaId,
     p_arquivo_nome: dados.data.arquivoNome,
     p_periodo_inicio: dados.data.periodoInicio,
     p_periodo_fim: dados.data.periodoFim,
     p_contagens: dados.data.contagens,
-    p_sugestoes: sugestoes,
   });
   if (error) return falha(mensagemDoBanco(error));
 
   const resultado = data as ResultadoImportacaoContagens;
   revalidatePath('/admin/contagens');
   revalidatePath('/');
+  if (resultado.auditoria_id) revalidatePath(`/auditorias/${resultado.auditoria_id}`);
+  return sucesso(resultado);
+}
+
+// ----------------------------------------------------- Importar estoque
+
+const esquemaImportacaoEstoque = z.object({
+  lojaId: uuid,
+  arquivoNome: textoObrigatorio('o nome do arquivo', 255),
+  itens: z
+    .array(
+      z.object({
+        codigo: z.number().int().positive(),
+        nome: z.string().trim().min(1).max(300),
+        marca: z.string().trim().min(1).max(200),
+        departamento: z.string().max(200).nullable(),
+        disponivel: z.number().finite(),
+      }),
+    )
+    .min(1, 'O arquivo não tem nenhum produto.')
+    .max(100_000, 'Arquivo grande demais para um relatório de estoque.')
+    .refine((l) => new Set(l.map((i) => i.codigo)).size === l.length, 'Há produtos repetidos.'),
+});
+
+export type ResultadoImportacaoEstoque = { importacao_id: string; auditoria_id: string | null; marcas_atualizadas: number };
+
+export async function importarEstoque(
+  entrada: z.input<typeof esquemaImportacaoEstoque>,
+): Promise<Resultado<ResultadoImportacaoEstoque>> {
+  const dados = esquemaImportacaoEstoque.safeParse(entrada);
+  if (!dados.success) return falha(mensagemDeValidacao(dados.error));
+
+  const { supabase } = await exigirPerfil('gestor', 'administrador');
+  const { data, error } = await supabase.rpc('importar_estoque', {
+    p_loja_id: dados.data.lojaId,
+    p_arquivo_nome: dados.data.arquivoNome,
+    p_itens: dados.data.itens,
+  });
+  if (error) return falha(mensagemDoBanco(error));
+
+  const resultado = data as ResultadoImportacaoEstoque;
+  revalidatePath('/admin/estoque');
   if (resultado.auditoria_id) revalidatePath(`/auditorias/${resultado.auditoria_id}`);
   return sucesso(resultado);
 }

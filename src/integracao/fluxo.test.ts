@@ -6,13 +6,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseContagensAcompanhadas } from '@/lib/parsers/contagens';
 import { lerPrimeiraAba } from '@/lib/parsers/planilha';
-import { calcularSugestoes } from '@/lib/sugestao';
 import { criarUsuario as criarUsuarioAdmin, emailsPorUsuario, redefinirSenha, sincronizarBloqueio } from '@/lib/usuarios';
 
 const URL = 'http://127.0.0.1:54321';
 const ARQUIVO_REAL =
   process.env.SANTRI_CONTAGENS_ODS ??
-  'C:/Users/castelo/Desktop/Relatorios-Logistica-Marcio/Arquivos_ods/contagens_acompanhadas 2026 9.ods';
+  'C:/Users/castelo/Desktop/Relatorios-Logistica-Marcio/Arquivos_ods/contagens_acompanhadas 2026 10.ods';
 
 function lerEnvDocker(): Record<string, string> {
   if (!existsSync('.env.docker')) return {};
@@ -78,6 +77,7 @@ describe.skipIf(!ativo)('integração com Supabase local', () => {
       const idsLojas = (lojas ?? []).map((l) => l.id);
       await servico.from('auditorias').delete().eq('empresa_id', empresaId);
       if (idsLojas.length) await servico.from('importacoes_contagem').delete().in('loja_id', idsLojas);
+      if (idsLojas.length) await servico.from('importacoes_estoque').delete().in('loja_id', idsLojas);
       await servico.from('lojas').delete().eq('empresa_id', empresaId);
       await servico.from('marcas').delete().eq('empresa_id', empresaId);
       await servico.from('importacoes_marcas').delete().eq('empresa_id', empresaId);
@@ -241,29 +241,116 @@ describe.skipIf(!ativo)('integração com Supabase local', () => {
     );
   });
 
-  it.skipIf(!existsSync(ARQUIVO_REAL))(
-    'importa o relatório real de contagens e aplica sugestões sem rebaixar',
-    async () => {
-      expect(
-        (await audA.rpc('importar_contagens', {
-          p_loja_id: lojaId, p_arquivo_nome: 'x', p_periodo_inicio: null, p_periodo_fim: null, p_contagens: [], p_sugestoes: [],
-        })).error,
-      ).not.toBeNull();
+  // Estoque: SKUs ativos por marca. Contagens: SKUs distintos contados.
+  const itemEstoque = (codigo: number, marca: string) => ({
+    codigo, nome: `PRODUTO ${codigo}`, marca, departamento: '001 - LOUÇAS', disponivel: codigo % 2,
+  });
+  const ESTOQUE = [
+    ...[1, 2, 3].map((c) => itemEstoque(c, 'HEVVY')),
+    ...[10, 11].map((c) => itemEstoque(c, 'GERMANY')),
+    ...[20, 21].map((c) => itemEstoque(c, 'BLUMENAU')),
+    ...[30, 31].map((c) => itemEstoque(c, 'TASCHIBRA')),
+    itemEstoque(40, 'MARCA SEM CONTAGEM'),
+  ];
+  let numeroContagem = 900_000;
+  const contagemCom = (status: string, itens: [string, string][]) => ({
+    numero: numeroContagem++, status, local: null, usuario: null, data_insercao: null, data_baixa: null,
+    itens: itens.map(([marca, produto_codigo]) => ({
+      marca, produto_codigo, produto_nome: null, estoque_fisico: null, qtd_contada: null, diferenca: null,
+    })),
+  });
+  const importarContagens = (contagens: unknown[], cliente = gestor) =>
+    cliente.rpc('importar_contagens', {
+      p_loja_id: lojaId, p_arquivo_nome: 'teste.ods', p_periodo_inicio: null, p_periodo_fim: null, p_contagens: contagens,
+    });
+  const statusAtual = async () => {
+    const r = await audA.from('auditoria_marcas').select('marca_nome, status, status_origem').eq('auditoria_id', auditoriaId);
+    return Object.fromEntries(r.data!.map((m) => [m.marca_nome, `${m.status}/${m.status_origem}`]));
+  };
+  const coberturaDe = (dados: { auditoria_marca_id: string }[] | null, nome: string) =>
+    dados!.find((c) => c.auditoria_marca_id === marcas.find((m) => m.marca_nome === nome)!.id);
 
+  it('contagens exigem o estoque da loja; só gestor/admin importa estoque', async () => {
+    const r = await importarContagens([contagemCom('baixada', [['HEVVY', '1']])]);
+    expect(r.error?.message).toMatch(/Importe primeiro o estoque/);
+    expect((await importarContagens([], audA)).error).not.toBeNull();
+    expect(
+      (await audA.rpc('importar_estoque', { p_loja_id: lojaId, p_arquivo_nome: 'x', p_itens: ESTOQUE })).error,
+    ).not.toBeNull();
+
+    const e = await gestor.rpc('importar_estoque', { p_loja_id: lojaId, p_arquivo_nome: 'estoque.ods', p_itens: ESTOQUE });
+    expect(e.error).toBeNull();
+    expect(e.data).toMatchObject({ auditoria_id: auditoriaId, marcas_atualizadas: 0 });
+  });
+
+  it('status pela cobertura de SKUs, somando as importações da auditoria', async () => {
+    // GERMANY está Parcial (manual) desde o teste anterior.
+    const r1 = await importarContagens([
+      // O status da contagem não importa (Cancelada conta) e o mesmo SKU vale 1.
+      contagemCom('cancelada', [['HEVVY', '1'], ['HEVVY', '2'], ['GERMANY', '10']]),
+      contagemCom('baixada', [['hevvy ', '1'], ['BLUMENAU', '20'], ['BLUMENAU', '2.1']]),
+    ]);
+    expect(r1.error).toBeNull();
+    expect(await statusAtual()).toMatchObject({
+      HEVVY: 'parcial/sugerido_importacao', // 2 de 3
+      GERMANY: 'parcial/manual', // 1 de 2: igual ao atual, não mexe
+      BLUMENAU: 'concluida/sugerido_importacao', // 2 de 2 ("2.1" = 21)
+      TASCHIBRA: 'pendente/manual',
+      'MARCA SEM CONTAGEM': 'pendente/manual',
+    });
+
+    // Segunda importação completa os SKUs que faltavam.
+    const r2 = await importarContagens([contagemCom('contada', [['HEVVY', '3'], ['GERMANY', '11'], ['TASCHIBRA', '30']])]);
+    expect(r2.error).toBeNull();
+    expect(await statusAtual()).toMatchObject({
+      HEVVY: 'concluida/sugerido_importacao',
+      GERMANY: 'concluida/sugerido_importacao',
+      TASCHIBRA: 'parcial/sugerido_importacao',
+    });
+
+    const cob = await audA.rpc('cobertura_auditoria', { p_auditoria_id: auditoriaId });
+    expect(coberturaDe(cob.data, 'HEVVY')).toMatchObject({
+      skus_ativos: 3, skus_com_saldo: 2, skus_contados: 3, departamentos: ['001 - LOUÇAS'],
+    });
+  });
+
+  it('estoque novo recalcula: concluída da importação volta a parcial; manual nunca cai', async () => {
+    const taschibra = marcas.find((m) => m.marca_nome === 'TASCHIBRA')!;
+    for (const status of ['em_contagem', 'concluida']) {
+      const r = await audA.rpc('atualizar_status_marca', { p_auditoria_marca_id: taschibra.id, p_status: status, p_observacao: null });
+      expect(r.error).toBeNull();
+    }
+
+    const e = await gestor.rpc('importar_estoque', {
+      p_loja_id: lojaId, p_arquivo_nome: 'estoque2.ods', p_itens: [...ESTOQUE, itemEstoque(4, 'HEVVY'), itemEstoque(32, 'TASCHIBRA')],
+    });
+    expect(e.error).toBeNull();
+    expect(await statusAtual()).toMatchObject({
+      HEVVY: 'parcial/sugerido_importacao', // 3 de 4
+      TASCHIBRA: 'concluida/manual', // 1 de 3, mas foi concluída à mão
+    });
+
+    // Prévia: SKUs do arquivo ainda não gravados entram na conta.
+    const cob = await gestor.rpc('cobertura_auditoria', {
+      p_auditoria_id: auditoriaId, p_extras: [{ marca: 'HEVVY', produto_codigo: '4' }],
+    });
+    expect(coberturaDe(cob.data, 'HEVVY')).toMatchObject({ skus_ativos: 4, skus_contados: 4 });
+  });
+
+  it.skipIf(!existsSync(ARQUIVO_REAL))(
+    'importa o relatório real de contagens',
+    async () => {
       const buffer = readFileSync(ARQUIVO_REAL);
       const leitura = parseContagensAcompanhadas(
         lerPrimeiraAba(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)),
       );
-      const sugestoes = [...calcularSugestoes(leitura.contagens).values()].map((s) => ({ marca: s.marca, status: s.status }));
-
       const inicio = Date.now();
       const r = await gestor.rpc('importar_contagens', {
         p_loja_id: lojaId,
-        p_arquivo_nome: 'contagens_acompanhadas 2026 9.ods',
+        p_arquivo_nome: 'contagens reais.ods',
         p_periodo_inicio: leitura.periodoInicio,
         p_periodo_fim: leitura.periodoFim,
         p_contagens: leitura.contagens,
-        p_sugestoes: sugestoes,
       });
       console.log(`importar_contagens: ${Date.now() - inicio} ms`, r.data);
       expect(r.error).toBeNull();
@@ -276,18 +363,6 @@ describe.skipIf(!ativo)('integração com Supabase local', () => {
         .limit(1);
       expect(itens.error).toBeNull();
       expect(itens.count).toBe(leitura.contagens.reduce((t, c) => t + c.itens.length, 0));
-
-      const depois = await audA.from('auditoria_marcas').select('marca_nome, status, status_origem').eq('auditoria_id', auditoriaId);
-      const porNome = Object.fromEntries(depois.data!.map((m) => [m.marca_nome, m]));
-      expect(porNome.HEVVY).toMatchObject({ status: 'concluida', status_origem: 'sugerido_importacao' });
-      expect(porNome['MARCA SEM CONTAGEM']).toMatchObject({ status: 'pendente' });
-
-      // Sugestão "parcial" não derruba uma marca já concluída.
-      const r2 = await gestor.rpc('importar_contagens', {
-        p_loja_id: lojaId, p_arquivo_nome: 'reimport.ods', p_periodo_inicio: null, p_periodo_fim: null,
-        p_contagens: leitura.contagens.slice(0, 1), p_sugestoes: [{ marca: 'HEVVY', status: 'parcial' }],
-      });
-      expect(r2.data.sugestoes_aplicadas).toBe(0);
     },
     120_000,
   );

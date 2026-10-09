@@ -35,10 +35,12 @@ Extras além da especificação, pedidos pelo usuário:
    com nível, redefinir senha, desativar = bloqueio de login no Auth.
 4. **Logo** no cabeçalho, login e favicon.
 5. **Gerar PDF** das marcas por status na tela da auditoria — ver skill `dash-pdf-marcas`.
+6. **Estoque ativo da loja + status por cobertura de SKUs** (2026-10-09) — ver skill `dash-estoque-cobertura`.
 
 Skills focadas complementares (`.claude/skills/dash-*`): `dash-pdf-marcas`,
 `dash-diagnostico-dev` (erro 500 no dev do usuário, instância paralela, login via curl),
-`dash-supabase-nuvem` (projeto na nuvem: migrations aplicadas e pendências para ir online).
+`dash-supabase-nuvem` (projeto na nuvem: migrations aplicadas e pendências para ir online),
+`dash-estoque-cobertura` (importar estoque, regra de SKUs contados ÷ ativos, departamentos).
 
 Pendências/ideias em aberto (perguntar antes de fazer):
 - Trocar a cor primária (violeta) pelo vermelho da logo — oferecido, sem resposta.
@@ -138,6 +140,9 @@ Signup público desativado; e-mail autoconfirmado (não há SMTP).
 5. `20260930110100_inicio_de_marca_e_codigo.sql` — `marca_codigo`, `iniciada_em`,
    `iniciada_por`; transições manuais; `rotulo_status_marca`; view com
    `marcas_em_contagem`.
+6. `20261009120000_estoque_e_cobertura_sku.sql` — `estoque_itens`, `importacoes_estoque`,
+   `importacoes_contagem.auditoria_id`, `cobertura_auditoria`, `aplicar_cobertura`,
+   `importar_estoque`; `importar_contagens` perdeu `p_sugestoes` (detalhes em `dash-estoque-cobertura`).
 
 Regras para migrations novas: **nunca editar uma já aplicada** — criar arquivo
 novo `AAAAMMDDHHMMSS_descricao.sql`; funções SECURITY INVOKER (RLS vale);
@@ -159,13 +164,12 @@ replace view` só acrescenta colunas no fim; depois `npm run db:migrate`.
 - Eventos (`eventos_auditoria`): auditoria_criada, marca_iniciada, inicio_desfeito,
   status_alterado, marca_reaberta, observacao_alterada, importacao_aplicada, auditoria_finalizada.
 - Finalizar com pendências: aviso na tela; depois de finalizada não aceita mudanças.
-- **Sugestão por importação de contagens** (`src/lib/sugestao.ts` + `importar_contagens`):
-  agrega por ITEM todas as contagens do arquivo; Cancelada ignorada; alguma Baixada →
-  concluida; senão Contada/Recontada → parcial; Aberta/Em contagem ignoradas; nunca
-  rebaixa; aplica só na auditoria em andamento da loja; casa marca **por nome
-  normalizado** (upper, trim, espaços) — o relatório não traz código da marca.
-  Contagens anteriores ao início da auditoria também contam (decisão não definida
-  na especificação).
+- **Status sugerido pela importação** = cobertura de SKUs (SKUs distintos contados ÷ SKUs
+  ativos do estoque da loja), calculada no banco (`aplicar_cobertura`). A regra antiga
+  (Baixada → concluída) foi substituída em 2026-10-09 — ver `dash-estoque-cobertura`.
+  Aplica só na auditoria em andamento da loja; casa marca **por nome normalizado**
+  (upper, trim, espaços) — os relatórios não trazem código da marca. Contagens de antes
+  do início da auditoria também contam se vierem num arquivo importado durante ela.
 - Perfis: auditor (só as próprias auditorias), gestor (vê tudo, importa
   contagens), administrador (tudo + cadastros, usuários, importar marcas).
   Admin não pode rebaixar/desativar a si mesmo. Desativar = `profiles.ativo=false`
@@ -187,6 +191,8 @@ replace view` só acrescenta colunas no fim; depois `npm run db:migrate`.
 - **Relação de Produtos por Marca** (`parsers/marcas.ts`): linha de colunas
   `Código | Nome | | | Total`, uma marca por linha até branco/"Filtros Selecionados";
   código "1.625" → 1625. Validado pelo usuário com arquivo real (485 marcas).
+- **Valor de Estoque - Analítico** (`parsers/estoque.ts`) — ver `dash-estoque-cobertura`.
+  Arquivo real de teste: `Valor do estoque.ods` na raiz do projeto (gitignored).
 - `.ods` estão no `.gitignore` (dados da empresa).
 
 ## Testes
