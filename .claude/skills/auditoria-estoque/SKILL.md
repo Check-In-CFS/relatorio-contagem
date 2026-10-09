@@ -36,11 +36,13 @@ Extras além da especificação, pedidos pelo usuário:
 4. **Logo** no cabeçalho, login e favicon.
 5. **Gerar PDF** das marcas por status na tela da auditoria — ver skill `dash-pdf-marcas`.
 6. **Estoque ativo da loja + status por cobertura de SKUs** (2026-10-09) — ver skill `dash-estoque-cobertura`.
+7. **Histórico de contagens** (quantas vezes cada marca foi contada 100%, 2026-10-09) — ver skill `dash-historico-contagens`.
 
 Skills focadas complementares (`.claude/skills/dash-*`): `dash-pdf-marcas`,
 `dash-diagnostico-dev` (erro 500 no dev do usuário, instância paralela, login via curl),
 `dash-supabase-nuvem` (projeto na nuvem: migrations aplicadas e pendências para ir online),
-`dash-estoque-cobertura` (importar estoque, regra de SKUs contados ÷ ativos, departamentos).
+`dash-estoque-cobertura` (importar estoque, regra de SKUs contados ÷ ativos, departamentos),
+`dash-historico-contagens` (rodadas de contagem por marca, "contada N×").
 
 Pendências/ideias em aberto (perguntar antes de fazer):
 - Trocar a cor primária (violeta) pelo vermelho da logo — oferecido, sem resposta.
@@ -143,6 +145,8 @@ Signup público desativado; e-mail autoconfirmado (não há SMTP).
 6. `20261009120000_estoque_e_cobertura_sku.sql` — `estoque_itens`, `importacoes_estoque`,
    `importacoes_contagem.auditoria_id`, `cobertura_auditoria`, `aplicar_cobertura`,
    `importar_estoque`; `importar_contagens` perdeu `p_sugestoes` (detalhes em `dash-estoque-cobertura`).
+7. `20261009150000_historico_contagens_marca.sql` — `historico_contagens_auditoria` (só leitura;
+   detalhes em `dash-historico-contagens`).
 
 Regras para migrations novas: **nunca editar uma já aplicada** — criar arquivo
 novo `AAAAMMDDHHMMSS_descricao.sql`; funções SECURITY INVOKER (RLS vale);

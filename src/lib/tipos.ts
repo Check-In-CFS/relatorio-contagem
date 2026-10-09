@@ -48,3 +48,16 @@ export type AuditoriaMarca = {
   observacao: string | null;
   atualizado_em: string;
 };
+
+// Linha de historico_contagens_auditoria: uma rodada de contagem da marca.
+// completa = os SKUs da rodada cobriram todos os ativos; a última pode estar em aberto.
+export type RodadaContagem = {
+  auditoria_marca_id: string;
+  rodada: number;
+  completa: boolean;
+  skus_contados: number;
+  skus_ativos: number;
+  inicio: string;
+  fim: string;
+  contagens: number[];
+};

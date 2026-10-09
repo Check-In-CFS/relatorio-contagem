@@ -4,7 +4,7 @@ import { exigirSessao } from '@/lib/auth';
 import { formatarDataHora } from '@/lib/formato';
 import { buscarTodas } from '@/lib/paginacao';
 import type { Cobertura } from '@/lib/sugestao';
-import type { AuditoriaMarca } from '@/lib/tipos';
+import type { AuditoriaMarca, RodadaContagem } from '@/lib/tipos';
 import { TelaAuditoria } from './TelaAuditoria';
 
 type Evento = { id: string; descricao: string; criado_em: string; usuario: { nome: string } | null };
@@ -20,7 +20,7 @@ export default async function AuditoriaPage({ params }: { params: { id: string }
   // Sem linha = não existe ou a RLS escondeu (auditoria de outro auditor).
   if (!auditoria) notFound();
 
-  const [marcas, cobertura, eventos] = await Promise.all([
+  const [marcas, cobertura, rodadas, eventos] = await Promise.all([
     buscarTodas<AuditoriaMarca>((de, ate) =>
       supabase
         .from('auditoria_marcas')
@@ -32,6 +32,13 @@ export default async function AuditoriaPage({ params }: { params: { id: string }
     ),
     buscarTodas<Cobertura>((de, ate) =>
       supabase.rpc('cobertura_auditoria', { p_auditoria_id: params.id }).order('auditoria_marca_id').range(de, ate),
+    ),
+    buscarTodas<RodadaContagem>((de, ate) =>
+      supabase
+        .rpc('historico_contagens_auditoria', { p_auditoria_id: params.id })
+        .order('auditoria_marca_id')
+        .order('rodada')
+        .range(de, ate),
     ),
     supabase
       .from('eventos_auditoria')
@@ -47,7 +54,7 @@ export default async function AuditoriaPage({ params }: { params: { id: string }
 
   return (
     <>
-      <TelaAuditoria auditoria={auditoria} marcasIniciais={marcas} cobertura={cobertura} podeEditar={podeEditar} />
+      <TelaAuditoria auditoria={auditoria} marcasIniciais={marcas} cobertura={cobertura} rodadas={rodadas} podeEditar={podeEditar} />
 
       <details className="mt-8 rounded-xl border border-line bg-card p-4">
         <summary className="cursor-pointer text-sm font-semibold">Histórico de alterações</summary>

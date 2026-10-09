@@ -337,6 +337,40 @@ describe.skipIf(!ativo)('integração com Supabase local', () => {
     expect(coberturaDe(cob.data, 'HEVVY')).toMatchObject({ skus_ativos: 4, skus_contados: 4 });
   });
 
+  it('histórico: conta quantas vezes cada marca foi contada 100%', async () => {
+    const historico = async (nome: string) => {
+      const r = await audA.rpc('historico_contagens_auditoria', { p_auditoria_id: auditoriaId });
+      expect(r.error).toBeNull();
+      const id = marcas.find((m) => m.marca_nome === nome)!.id;
+      return (r.data as { auditoria_marca_id: string; rodada: number; completa: boolean; skus_contados: number; contagens: number[] }[])
+        .filter((h) => h.auditoria_marca_id === id)
+        .sort((a, b) => a.rodada - b.rodada)
+        .map((h) => `${h.rodada}:${h.completa ? 'completa' : 'aberta'}:${h.skus_contados}:${h.contagens.length}`);
+    };
+
+    // HEVVY tem 4 SKUs agora; as 3 contagens anteriores somam 3 → rodada 1 em aberto.
+    expect(await historico('HEVVY')).toEqual(['1:aberta:3:3']);
+    expect(await historico('BLUMENAU')).toEqual(['1:completa:2:1']);
+
+    // Completa a 1ª e faz uma 2ª inteira em duas contagens avulsas (sem data = lotes separados).
+    const ultima = contagemCom('baixada', [['HEVVY', '4']]);
+    expect((await importarContagens([ultima])).error).toBeNull();
+    expect(
+      (await importarContagens([contagemCom('baixada', [['HEVVY', '1'], ['HEVVY', '2']]), contagemCom('baixada', [['HEVVY', '3'], ['HEVVY', '4']])])).error,
+    ).toBeNull();
+    expect(await historico('HEVVY')).toEqual(['1:completa:4:4', '2:completa:4:2']);
+
+    // Mesmo horário de inserção = uma contagem física dividida por local: vale 1 vez.
+    const quando = new Date().toISOString(); // depois das contagens anteriores
+    const deposito = { ...contagemCom('baixada', [['BLUMENAU', '20'], ['BLUMENAU', '21']]), data_insercao: quando };
+    const loja = { ...contagemCom('baixada', [['BLUMENAU', '20'], ['BLUMENAU', '21']]), data_insercao: quando };
+    expect((await importarContagens([deposito, loja])).error).toBeNull();
+    // A mesma contagem reimportada em outro arquivo não conta de novo.
+    expect((await importarContagens([deposito, ultima])).error).toBeNull();
+    expect(await historico('BLUMENAU')).toEqual(['1:completa:2:1', '2:completa:2:2']);
+    expect(await historico('HEVVY')).toEqual(['1:completa:4:4', '2:completa:4:2']);
+  });
+
   it.skipIf(!existsSync(ARQUIVO_REAL))(
     'importa o relatório real de contagens',
     async () => {

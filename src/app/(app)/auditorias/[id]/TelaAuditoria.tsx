@@ -6,12 +6,18 @@ import type { ResumoAuditoria } from '@/components/CartaoAuditoria';
 import { Alerta, AreaTexto, BarraProgresso, Botao, Campo, Cartao, cx, Selecao, SeloStatus } from '@/components/ui';
 import { formatarDataHora, formatarDuracao, percentual } from '@/lib/formato';
 import type { Cobertura } from '@/lib/sugestao';
-import { ROTULO_STATUS_AUDITORIA, ROTULO_STATUS_MARCA_PLURAL, type AuditoriaMarca, type StatusMarca } from '@/lib/tipos';
+import {
+  ROTULO_STATUS_AUDITORIA,
+  ROTULO_STATUS_MARCA_PLURAL,
+  type AuditoriaMarca,
+  type RodadaContagem,
+  type StatusMarca,
+} from '@/lib/tipos';
 import { atualizarStatusMarca, finalizarAuditoria } from '../actions';
 import { GerarPdf } from './GerarPdf';
 
 type Filtro = 'todas' | StatusMarca;
-type Ordem = 'az' | 'za' | 'codigo' | 'abertas' | 'recentes';
+type Ordem = 'az' | 'za' | 'codigo' | 'abertas' | 'recentes' | 'vezes';
 
 const STATUS: StatusMarca[] = ['pendente', 'em_contagem', 'parcial', 'concluida'];
 const PLURAL = ROTULO_STATUS_MARCA_PLURAL;
@@ -22,11 +28,13 @@ export function TelaAuditoria({
   auditoria,
   marcasIniciais,
   cobertura,
+  rodadas,
   podeEditar,
 }: {
   auditoria: ResumoAuditoria;
   marcasIniciais: AuditoriaMarca[];
   cobertura: Cobertura[];
+  rodadas: RodadaContagem[];
   podeEditar: boolean;
 }) {
   const router = useRouter();
@@ -57,6 +65,18 @@ export function TelaAuditoria({
     [cobertura],
   );
 
+  const rodadasPorId = useMemo(() => {
+    const mapa = new Map<string, RodadaContagem[]>();
+    for (const r of rodadas) mapa.set(r.auditoria_marca_id, [...(mapa.get(r.auditoria_marca_id) ?? []), r]);
+    return mapa;
+  }, [rodadas]);
+  // Vezes contada = rodadas completas (todos os SKUs ativos cobertos).
+  const vezesPorId = useMemo(
+    () => new Map([...rodadasPorId].map(([id, rs]) => [id, rs.filter((r) => r.completa).length])),
+    [rodadasPorId],
+  );
+  const recontadas = useMemo(() => [...vezesPorId.values()].filter((v) => v > 1).length, [vezesPorId]);
+
   const totais = useMemo(() => {
     const t: Record<StatusMarca, number> = { pendente: 0, em_contagem: 0, parcial: 0, concluida: 0 };
     for (const m of marcas) t[m.status]++;
@@ -81,9 +101,10 @@ export function TelaAuditoria({
       codigo: (a, b) => (a.marca_codigo ?? Infinity) - (b.marca_codigo ?? Infinity) || porNome(a, b),
       abertas: (a, b) => PESO_ABERTAS[a.status] - PESO_ABERTAS[b.status] || porNome(a, b),
       recentes: (a, b) => b.atualizado_em.localeCompare(a.atualizado_em) || porNome(a, b),
+      vezes: (a, b) => (vezesPorId.get(b.id) ?? 0) - (vezesPorId.get(a.id) ?? 0) || porNome(a, b),
     };
     return lista.sort(comparadores[ordem]);
-  }, [marcas, filtro, buscaAdiada, ordem, departamento, coberturaPorId]);
+    }, [marcas, filtro, buscaAdiada, ordem, departamento, coberturaPorId, vezesPorId]);
 
   async function salvar(marca: AuditoriaMarca, status: StatusMarca, observacao: string | null) {
     const anterior = marca;
@@ -147,6 +168,12 @@ export function TelaAuditoria({
           <p className="text-sm text-muted">
             <span className="font-mono">{totais.concluida}</span> de <span className="font-mono">{marcas.length}</span>{' '}
             marcas concluídas
+            {recontadas > 0 && (
+              <>
+                {' · '}
+                <span className="font-mono">{recontadas}</span> contadas mais de uma vez
+              </>
+            )}
           </p>
         </div>
         <div className="mt-3">
@@ -220,6 +247,7 @@ export function TelaAuditoria({
           <option value="codigo">Código</option>
           <option value="abertas">Não concluídas primeiro</option>
           <option value="recentes">Alteradas recentemente</option>
+          {rodadas.length > 0 && <option value="vezes">Mais vezes contadas</option>}
         </Selecao>
       </div>
 
@@ -232,6 +260,7 @@ export function TelaAuditoria({
             key={m.id}
             marca={m}
             cobertura={temEstoque ? coberturaPorId.get(m.id) : undefined}
+            rodadas={rodadasPorId.get(m.id)}
             podeEditar={podeEditar}
             salvando={salvando.has(m.id)}
             onSalvar={(status, obs) => salvar(m, status, obs)}
@@ -249,17 +278,21 @@ const BOTAO_ACAO =
 function LinhaMarca({
   marca,
   cobertura,
+  rodadas,
   podeEditar,
   salvando,
   onSalvar,
 }: {
   marca: AuditoriaMarca;
   cobertura?: Cobertura;
+  rodadas?: RodadaContagem[];
   podeEditar: boolean;
   salvando: boolean;
   onSalvar: (status: StatusMarca, observacao: string | null) => void;
 }) {
   const [editandoObs, setEditandoObs] = useState(false);
+  const [vendoHistorico, setVendoHistorico] = useState(false);
+  const vezes = rodadas?.filter((r) => r.completa).length ?? 0;
   const [obs, setObs] = useState(marca.observacao ?? '');
   const mudar = (status: StatusMarca) => onSalvar(status, marca.observacao);
 
@@ -285,6 +318,20 @@ function LinhaMarca({
                 {cobertura.skus_contados}/{cobertura.skus_ativos} SKUs
                 {cobertura.skus_ativos > 0 && ` · ${Math.floor((cobertura.skus_contados / cobertura.skus_ativos) * 100)}%`}
               </span>
+            )}
+            {rodadas && rodadas.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setVendoHistorico((v) => !v)}
+                aria-expanded={vendoHistorico}
+                title="Histórico de contagens desta marca"
+                className={cx(
+                  'rounded-full px-2 py-0.5 font-semibold transition-colors duration-150 hover:bg-bg',
+                  vezes > 1 ? 'bg-accent/15 texto-sucesso' : 'border border-line',
+                )}
+              >
+                {vezes > 0 ? `contada ${vezes}×` : 'histórico'}
+              </button>
             )}
             {marca.iniciada_em && marca.status !== 'pendente' && (
               <span>iniciada {formatarDataHora(marca.iniciada_em)}</span>
@@ -361,6 +408,7 @@ function LinhaMarca({
           </div>
         )}
       </div>
+      {vendoHistorico && rodadas && <HistoricoContagens rodadas={rodadas} />}
       {editandoObs && (
         <form
           className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start"
@@ -384,6 +432,32 @@ function LinhaMarca({
         </form>
       )}
     </li>
+  );
+}
+
+function HistoricoContagens({ rodadas }: { rodadas: RodadaContagem[] }) {
+  return (
+    <ol className="mt-3 space-y-2 rounded-xl border border-line bg-bg p-3 text-xs">
+      {rodadas.map((r) => (
+        <li key={r.rodada}>
+          <p>
+            <span className="font-semibold">{r.rodada}ª contagem</span>{' '}
+            {r.completa ? (
+              <span className="texto-sucesso">completa</span>
+            ) : (
+              <span className="texto-aviso">em andamento</span>
+            )}{' '}
+            · <span className="font-mono">{r.skus_contados}/{r.skus_ativos} SKUs</span> ·{' '}
+            {formatarDataHora(r.inicio)}
+            {r.fim !== r.inicio && <> → {formatarDataHora(r.fim)}</>}
+          </p>
+          <p className="mt-0.5 text-muted">
+            {r.contagens.length === 1 ? 'Contagem' : `${r.contagens.length} contagens`}:{' '}
+            <span className="font-mono">{r.contagens.join(', ')}</span>
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 

@@ -22,7 +22,13 @@ O MCP grava com timestamp próprio (não o do nome do arquivo); confira com
 | 20260930110000_status_em_contagem | ✅ |
 | 20260930110100_inicio_de_marca_e_codigo | ✅ (independe da rls_desempenho; os índices dela usam `if not exists`) |
 
-| 20261009120000_estoque_e_cobertura_sku | ❌ **pendente** — aplicar junto com o deploy do código novo (o código antigo chama `importar_contagens` com `p_sugestoes`, que a migration remove) |
+| 20261009120000_estoque_e_cobertura_sku | ✅ aplicada pelo usuário no SQL Editor em 2026-10-09 (não aparece em `list_migrations`; conferida pelas 2 tabelas, coluna `importacoes_contagem.auditoria_id`, 4 funções, 4 policies, 4 índices) |
+
+| 20261009150000_historico_contagens_marca | ✅ aplicada pelo usuário no SQL Editor em 2026-10-09 (conferida: função existe e roda) |
+
+Aplicar migration na nuvem via MCP `apply_migration` é **bloqueado pelo modo automático**
+("Production Deploy"). Caminho que funciona: o usuário cola o arquivo no SQL Editor e
+depois conferir via `execute_sql` (leitura é permitida).
 
 Toda migration nova precisa ser aplicada **nos dois lugares**: local (`npm run db:migrate`) e nuvem.
 
